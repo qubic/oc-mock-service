@@ -1,0 +1,22 @@
+services:
+  oc-mock-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: oc-mock-service:latest
+    container_name: oc-mock-service
+    volumes:
+      # SQLite DB (dedup + replication counts).
+      - ./data:/opt/qubic/oc-mock-service/data
+      # Per-epoch computor keysets: computors_<epoch>.bin (676 * 32 raw bytes).
+      - ./keys:/opt/qubic/oc-mock-service/keys
+    environment:
+      # Node to lazily fetch missing epoch keysets from (host or host:port).
+      # Empty = off; provide keys/ files manually instead.
+      - OC_KEYS_NODE=${OC_KEYS_NODE:-}
+      # Arbitrator identity the fetched computor list must be signed by.
+      # Default (unset) = mainnet arbitrator; override for test networks.
+      - OC_ARBITRATOR=${OC_ARBITRATOR:-AFZPUAIYVPNUYGJRQVLUKOPPVLHAZQTGLYAAUUNBXFTVTAMSBKQBLEIEPCVJ}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
