@@ -1,0 +1,20 @@
+name: SecurityTest
+
+# Throwaway workflow used to verify that changes under .github/workflows/
+# require review from @qubic/workflow-security via CODEOWNERS. Not for merge.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/securityTest.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  noop:
+    name: noop
+    runs-on: ubuntu-latest
+    steps:
+      - name: No-op
+        run: echo "codeowners enforcement test"
