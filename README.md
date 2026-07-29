@@ -79,7 +79,7 @@ docker compose -f docker/docker-compose.yml up -d
 
 # If OC_KEYS_NODE points at a node on this host's loopback, use host networking instead:
 docker run -d --name oc-mock-service --network host --restart unless-stopped \
-  -e OC_KEYS_NODE=127.0.0.1:31841 \
+  -e OC_KEYS_NODE=127.0.0.1:21841 \
   -v "$PWD/keys:/opt/qubic/oc-mock-service/keys" \
   -v "$PWD/data:/opt/qubic/oc-mock-service/data" \
   oc-mock-service:latest
@@ -93,7 +93,7 @@ docker run -d --name oc-mock-service --network host --restart unless-stopped \
 | `OC_VERIFY_BIN` | `build/oc_verify` | path to the verifier binary |
 | `OC_KEYS_DIR` | `keys/` | dir of `computors_<epoch>.bin` files |
 | `OC_DB_PATH` | `data/oc_mock.db` | SQLite file |
-| `OC_KEYS_NODE` | *(empty = off)* | node (`host` or `host:port`) to lazily fetch missing epoch keysets from |
+| `OC_KEYS_NODE` | *(empty = off)* | node (`host` or `host:port`, port defaults to 21841) to lazily fetch missing epoch keysets from |
 | `OC_ARBITRATOR` | mainnet arbitrator | identity the fetched computor list must be signed by |
 | `OC_COMPUTORS_VERIFY_BIN` | `build/computors_verify` | path to the list verifier binary |
 | `OC_ALLOW_UNSIGNED_COMPUTORS` | *(off)* | `1` accepts a fetched list with an **all-zero** signature (test networks have no arbitrator). A wrong non-zero signature is still rejected. Never enable against mainnet. |

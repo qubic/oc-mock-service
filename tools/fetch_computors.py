@@ -31,7 +31,7 @@ DEFAULT_VERIFY_BIN = str(Path(__file__).resolve().parents[1] / "build" / "comput
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("host", nargs="?", default="127.0.0.1")
-    parser.add_argument("port", nargs="?", type=int, default=31841)
+    parser.add_argument("port", nargs="?", type=int, default=21841)
     parser.add_argument("--out", default="keys", help="output directory (default: keys/)")
     parser.add_argument("--arbitrator", default=DEFAULT_ARBITRATOR,
                         help="arbitrator identity the list must be signed by")
