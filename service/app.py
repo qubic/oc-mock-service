@@ -12,7 +12,7 @@ Config via env vars:
     OC_KEYS_DIR              dir with computors_<epoch>.bin (default: ./keys)
     OC_DB_PATH               sqlite path              (default: ./data/oc_mock.db)
     OC_KEYS_NODE             Qubic node to lazily fetch missing epoch keysets
-                             from, "host" or "host:port" (default port 31841).
+                             from, "host" or "host:port" (default port 21841).
                              Empty = no auto-fetch (manual keys only).
     OC_ARBITRATOR            60-char arbitrator identity the fetched computor
                              list must be signed by (default: mainnet arbitrator)
@@ -56,7 +56,7 @@ if OC_KEYS_NODE:
     _host, _, _port = OC_KEYS_NODE.partition(":")
     key_fetcher = KeyFetcher(
         node_host=_host,
-        node_port=int(_port) if _port else 31841,
+        node_port=int(_port) if _port else 21841,
         arbitrator=OC_ARBITRATOR,
         verify_bin=OC_COMPUTORS_VERIFY_BIN,
         keys_dir=OC_KEYS_DIR,
