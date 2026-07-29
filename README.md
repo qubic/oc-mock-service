@@ -76,13 +76,6 @@ docker build -f docker/Dockerfile -t oc-mock-service:latest .
 
 # Bridge network, port 8000 mapped; keys/ and data/ persisted under docker/:
 docker compose -f docker/docker-compose.yml up -d
-
-# If OC_KEYS_NODE points at a node on this host's loopback, use host networking instead:
-docker run -d --name oc-mock-service --network host --restart unless-stopped \
-  -e OC_KEYS_NODE=127.0.0.1:21841 \
-  -v "$PWD/keys:/opt/qubic/oc-mock-service/keys" \
-  -v "$PWD/data:/opt/qubic/oc-mock-service/data" \
-  oc-mock-service:latest
 # The container runs as uid 999; chown the mounted keys/ and data/ dirs accordingly.
 ```
 
