@@ -75,8 +75,16 @@ open http://localhost:8000/          # live homepage
 docker build -f docker/Dockerfile -t oc-mock-service:latest .
 
 # Bridge network, port 8000 mapped; keys/ and data/ persisted under docker/:
-docker compose -f docker/docker-compose.yml up -d
+OC_KEYS_NODE=<node ip> docker compose -f docker/docker-compose.yml up -d
 # The container runs as uid 999; chown the mounted keys/ and data/ dirs accordingly.
+
+# Or without compose:
+docker run -d --name oc-mock-service --restart unless-stopped \
+  -p 8000:8000 \
+  -e OC_KEYS_NODE=<node ip> \
+  -v "$PWD/keys:/opt/qubic/oc-mock-service/keys" \
+  -v "$PWD/data:/opt/qubic/oc-mock-service/data" \
+  oc-mock-service:latest
 ```
 
 ### Config (env vars)
