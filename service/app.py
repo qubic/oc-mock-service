@@ -25,6 +25,7 @@ Config via env vars:
                              NEVER enable against mainnet.
 """
 
+import html
 import os
 import time
 from pathlib import Path
@@ -156,7 +157,9 @@ async def ingest(request: Request):
 
 @app.get("/api/invocations")
 def api_invocations(limit: int = 100):
-    return {"invocations": store.recent(limit)}
+    # `total` rides along so the homepage poller can update the counter card
+    # without a second request.
+    return {"invocations": store.recent(limit), "total": store.total()}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -193,16 +196,27 @@ def _ago(ts: float) -> str:
     return f"{d // 86400}d ago"
 
 
+_EMPTY_ROW = ('<tr><td class="empty" colspan="8">No verified invocations yet '
+              '— waiting for the first authorized invocation.</td></tr>')
+
+
+def _esc(v) -> str:
+    """HTML-escape a cell value (quotes too — some land in attributes)."""
+    return html.escape(str(v), quote=True)
+
+
 def _render(rows, total: int) -> str:
+    # Values reach the DB from verified bundles, but escape anyway — the row
+    # is markup and the client-side poller escapes the same fields.
     body = "\n".join(
-        f"""<tr>
-            <td class="mono id">{r['invocation_id']}</td>
-            <td class="mono">{r['tick']}</td>
-            <td class="mono">{r['epoch']}</td>
-            <td class="mono">{r['interface_index']}</td>
-            <td class="mono val">{_mock_value(r['request_hex'])}</td>
-            <td class="mono ok">{r['verified_sigs']}</td>
-            <td class="mono">&times;{r['replication']}</td>
+        f"""<tr data-id="{_esc(r['invocation_id'])}" data-seen="{r['last_seen']}">
+            <td class="mono id">{_esc(r['invocation_id'])}</td>
+            <td class="mono">{_esc(r['tick'])}</td>
+            <td class="mono">{_esc(r['epoch'])}</td>
+            <td class="mono">{_esc(r['interface_index'])}</td>
+            <td class="mono val">{_esc(_mock_value(r['request_hex']))}</td>
+            <td class="mono ok">{_esc(r['verified_sigs'])}</td>
+            <td class="mono">&times;{_esc(r['replication'])}</td>
             <td class="age">{_ago(r['last_seen'])}</td>
         </tr>"""
         for r in rows
@@ -211,13 +225,13 @@ def _render(rows, total: int) -> str:
         ("Verified invocations", f"{total}"),
     ]
     cards = "\n".join(
-        f'<div class="card"><div class="k">{k}</div><div class="v mono">{v}</div></div>'
+        f'<div class="card" id="card-total"><div class="k">{k}</div>'
+        f'<div class="v mono" id="total">{v}</div></div>'
         for k, v in stats
     )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="5">
 <title>Qubic Outsourced Computations — Mock Interface Service</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -280,6 +294,32 @@ def _render(rows, total: int) -> str:
   .ok {{ color:var(--cyan); }}
   .age {{ color:var(--muted); font-size:.8rem; }}
   td.empty {{ text-align:center; color:var(--muted); padding:3rem 1rem; }}
+
+  /* New-arrival effects. Applied by the poller, removed on animationend. */
+  tr.fresh td {{ animation:sweep 1.6s ease-out; }}
+  @keyframes sweep {{
+    0%   {{ background:#32d9d92e; box-shadow:inset 0 0 0 9999px #32d9d914; }}
+    100% {{ background:transparent; box-shadow:inset 0 0 0 9999px #32d9d900; }}
+  }}
+  .card.pop .v {{ animation:pop .7s cubic-bezier(.2,1.4,.4,1); }}
+  @keyframes pop {{
+    0%   {{ transform:scale(1); color:var(--fg); }}
+    35%  {{ transform:scale(1.18); color:var(--cyan); text-shadow:0 0 14px #32d9d980; }}
+    100% {{ transform:scale(1); color:var(--fg); text-shadow:none; }}
+  }}
+  .card .v {{ display:inline-block; transform-origin:left center; }}
+
+  /* Effects toggle in the panel header. */
+  .fx {{
+    font-family:var(--mono); font-size:.72rem; color:var(--muted);
+    display:flex; align-items:center; gap:.4rem; cursor:pointer; user-select:none;
+  }}
+  .fx input {{ accent-color:var(--cyan); cursor:pointer; margin:0; }}
+  .panel-h .right {{ display:flex; align-items:center; gap:1rem; }}
+
+  @media (prefers-reduced-motion:reduce) {{
+    tr.fresh td, .card.pop .v {{ animation:none; }}
+  }}
   @media (max-width:640px) {{ .wrap {{ padding:1.5rem 1rem 3rem; }} }}
 </style></head>
 <body>
@@ -300,8 +340,22 @@ def _render(rows, total: int) -> str:
 
     <div class="panel">
       <div class="panel-h">
-        <h2>Verified invocations <span class="muted">· latest {len(rows)}</span></h2>
-        <span class="live"><span class="dot"></span>live · refreshes every 5s</span>
+        <h2>Verified invocations <span class="muted">· latest <span id="shown">{len(rows)}</span></span></h2>
+        <span class="right">
+          <label class="fx" title="Highlight invocations as they arrive">
+            <input type="checkbox" id="fx-toggle" checked> effects
+          </label>
+          <script>
+            // Apply the stored preference before first paint: the HTML is
+            // edge-cached with the box checked, so waiting for the main script
+            // would flash the wrong state at anyone who turned effects off.
+            try {{
+              document.getElementById('fx-toggle').checked =
+                localStorage.getItem('oc_fx') !== '0';
+            }} catch (e) {{}}
+          </script>
+          <span class="live"><span class="dot"></span>live</span>
+        </span>
       </div>
       <div class="scroll">
         <table>
@@ -309,11 +363,120 @@ def _render(rows, total: int) -> str:
             <th>Invocation ID</th><th>Tick</th><th>Epoch</th><th>Interface</th>
             <th>Request value</th><th>Verified sigs</th><th>OC machines</th><th>Last seen</th>
           </tr></thead>
-          <tbody>
-            {body if rows else '<tr><td class="empty" colspan="8">No verified invocations yet — waiting for the first authorized invocation.</td></tr>'}
+          <tbody id="rows">
+            {body if rows else _EMPTY_ROW}
           </tbody>
         </table>
       </div>
     </div>
   </div>
+<script>
+(function () {{
+  var POLL_MS = 5000;
+  var rowsEl = document.getElementById('rows');
+  var totalEl = document.getElementById('total');
+  var cardEl = document.getElementById('card-total');
+  var shownEl = document.getElementById('shown');
+  var toggle = document.getElementById('fx-toggle');
+
+  // Preference is per-browser: the HTML is edge-cached, so a server-side
+  // setting would become every visitor's setting. The inline script above
+  // already applied it to the checkbox; here we only persist changes.
+  toggle.addEventListener('change', function () {{
+    try {{ localStorage.setItem('oc_fx', toggle.checked ? '1' : '0'); }} catch (e) {{}}
+  }});
+
+  // Seed from the server-rendered rows so the first poll doesn't flag
+  // everything already on screen as new.
+  var seen = new Set();
+  Array.prototype.forEach.call(rowsEl.querySelectorAll('tr[data-id]'), function (tr) {{
+    seen.add(tr.dataset.id);
+  }});
+  var lastTotal = parseInt(totalEl.textContent, 10) || 0;
+
+  function esc(s) {{
+    return String(s).replace(/[&<>"']/g, function (c) {{
+      return {{'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}}[c];
+    }});
+  }}
+
+  function mockValue(hex) {{
+    // uint64 little-endian, mirroring _mock_value() server-side.
+    if (!hex || hex.length < 16) return hex ? esc(hex) : '-';
+    var v = 0n;
+    for (var i = 0; i < 8; i++) {{
+      v |= BigInt(parseInt(hex.substr(i * 2, 2), 16)) << BigInt(i * 8);
+    }}
+    return v.toString();
+  }}
+
+  function ago(ts) {{
+    var d = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+    if (d < 60) return d + 's ago';
+    if (d < 3600) return Math.floor(d / 60) + 'm ago';
+    if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+    return Math.floor(d / 86400) + 'd ago';
+  }}
+
+  function rowHtml(r) {{
+    return '<tr data-id="' + esc(r.invocation_id) + '" data-seen="' + r.last_seen + '">'
+      + '<td class="mono id">' + esc(r.invocation_id) + '</td>'
+      + '<td class="mono">' + esc(r.tick) + '</td>'
+      + '<td class="mono">' + esc(r.epoch) + '</td>'
+      + '<td class="mono">' + esc(r.interface_index) + '</td>'
+      + '<td class="mono val">' + mockValue(r.request_hex) + '</td>'
+      + '<td class="mono ok">' + esc(r.verified_sigs) + '</td>'
+      + '<td class="mono">&times;' + esc(r.replication) + '</td>'
+      + '<td class="age">' + ago(r.last_seen) + '</td>'
+      + '</tr>';
+  }}
+
+  function refreshAges() {{
+    Array.prototype.forEach.call(rowsEl.querySelectorAll('tr[data-seen]'), function (tr) {{
+      var cell = tr.lastElementChild;
+      if (cell) cell.textContent = ago(parseFloat(tr.dataset.seen));
+    }});
+  }}
+
+  function poll() {{
+    fetch('/api/invocations?limit=100', {{headers: {{'Accept': 'application/json'}}}})
+      .then(function (r) {{ return r.ok ? r.json() : Promise.reject(r.status); }})
+      .then(function (data) {{
+        var list = data.invocations || [];
+        var fx = toggle.checked;
+        var fresh = [];
+        list.forEach(function (r) {{ if (!seen.has(r.invocation_id)) fresh.push(r.invocation_id); }});
+
+        rowsEl.innerHTML = list.length ? list.map(rowHtml).join('') : {_EMPTY_ROW!r};
+        list.forEach(function (r) {{ seen.add(r.invocation_id); }});
+        shownEl.textContent = list.length;
+
+        if (fx && fresh.length) {{
+          fresh.forEach(function (id) {{
+            var tr = rowsEl.querySelector('tr[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+            if (!tr) return;
+            tr.classList.add('fresh');
+            tr.addEventListener('animationend', function () {{ tr.classList.remove('fresh'); }}, {{once: true}});
+          }});
+        }}
+
+        if (typeof data.total === 'number') {{
+          var grew = data.total > lastTotal;
+          totalEl.textContent = data.total;
+          lastTotal = data.total;
+          if (fx && grew) {{
+            cardEl.classList.remove('pop');
+            void cardEl.offsetWidth;  // restart the animation
+            cardEl.classList.add('pop');
+          }}
+        }}
+      }})
+      .catch(function () {{ /* transient: next tick retries */ }});
+  }}
+
+  setInterval(poll, POLL_MS);
+  setInterval(refreshAges, 1000);
+  if (document.visibilityState === 'visible') poll();
+}})();
+</script>
 </body></html>"""
