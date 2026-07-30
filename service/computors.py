@@ -106,11 +106,13 @@ class KeyFetcher:
     in the core), so even a compromised node cannot substitute keys.
     """
 
-    def __init__(self, node_host: str, node_port: int, arbitrator: str,
+    def __init__(self, nodes, arbitrator: str,
                  verify_bin: str, keys_dir: str, cooldown: float = 60.0,
                  allow_unsigned: bool = False):
-        self.node_host = node_host
-        self.node_port = node_port
+        # nodes: [(host, port), ...] tried in order until one serves the epoch.
+        self.nodes = list(nodes)
+        if not self.nodes:
+            raise ValueError("KeyFetcher needs at least one node")
         self.arbitrator = arbitrator
         self.verify_bin = verify_bin
         self.keys_dir = Path(keys_dir)
@@ -133,17 +135,29 @@ class KeyFetcher:
         if path.exists():
             return True
 
+        # One cooldown per ROUND, not per node: a dead first node must not spend
+        # the whole budget and leave the healthy ones untried.
         now = time.monotonic()
         if now - self._last_attempt < self.cooldown:
             return False
         self._last_attempt = now
 
+        # Try each node until one serves the epoch we actually need. A node only
+        # ever serves its current epoch, so a wrong-epoch answer is also a miss.
+        for host, port in self.nodes:
+            if self._fetch_from(host, port) and path.exists():
+                return True
+        print(f"KeyFetcher: no node served epoch {epoch} "
+              f"({len(self.nodes)} tried)", file=sys.stderr)
+        return False
+
+    def _fetch_from(self, host: str, port: int) -> bool:
+        """Fetch + verify + write one node's list. True if a keyset was written."""
         try:
-            payload = fetch_computors_payload(self.node_host, self.node_port)
+            payload = fetch_computors_payload(host, port)
             verdict = verify_computors_payload(self.verify_bin, self.arbitrator, payload)
         except (OSError, FetchError) as e:
-            print(f"KeyFetcher: fetch from {self.node_host}:{self.node_port} failed: {e}",
-                  file=sys.stderr)
+            print(f"KeyFetcher: fetch from {host}:{port} failed: {e}", file=sys.stderr)
             return False
 
         if not verdict.get("valid"):
@@ -154,12 +168,12 @@ class KeyFetcher:
                       f"{verdict.get('epoch')} (OC_ALLOW_UNSIGNED_COMPUTORS — testnet only)",
                       file=sys.stderr)
             else:
-                print(f"KeyFetcher: REJECTED computor list for epoch {verdict.get('epoch')} "
-                      f"({verdict.get('reason')}) — arbitrator signature check failed",
-                      file=sys.stderr)
+                print(f"KeyFetcher: REJECTED computor list from {host}:{port} for epoch "
+                      f"{verdict.get('epoch')} ({verdict.get('reason')}) — arbitrator "
+                      f"signature check failed", file=sys.stderr)
                 return False
 
         written = write_keyset(self.keys_dir, payload)
-        print(f"KeyFetcher: verified + wrote {written} (epoch {verdict['epoch']})",
-              file=sys.stderr)
-        return path.exists()
+        print(f"KeyFetcher: verified + wrote {written} (epoch {verdict['epoch']} "
+              f"from {host}:{port})", file=sys.stderr)
+        return True

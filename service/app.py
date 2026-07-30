@@ -11,8 +11,10 @@ Config via env vars:
     OC_VERIFY_BIN            path to oc_verify        (default: ../build/oc_verify)
     OC_KEYS_DIR              dir with computors_<epoch>.bin (default: ./keys)
     OC_DB_PATH               sqlite path              (default: ./data/oc_mock.db)
-    OC_KEYS_NODE             Qubic node to lazily fetch missing epoch keysets
-                             from, "host" or "host:port" (default port 21841).
+    OC_KEYS_NODE             Qubic node(s) to lazily fetch missing epoch keysets
+                             from: comma-separated "host" or "host:port"
+                             (default port 21841), tried in order until one
+                             serves the epoch.
                              Empty = no auto-fetch (manual keys only).
     OC_ARBITRATOR            60-char arbitrator identity the fetched computor
                              list must be signed by (default: mainnet arbitrator)
@@ -53,12 +55,22 @@ app = FastAPI(title="OC Mock Interface Service")
 store = Store(OC_DB_PATH)
 verifier = Verifier(OC_VERIFY_BIN, OC_KEYS_DIR)
 
+def _parse_nodes(spec: str):
+    """"host, host:port, ..." -> [(host, port), ...] (default port 21841)."""
+    nodes = []
+    for entry in spec.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        host, _, port = entry.partition(":")
+        nodes.append((host, int(port) if port else 21841))
+    return nodes
+
+
 key_fetcher = None
 if OC_KEYS_NODE:
-    _host, _, _port = OC_KEYS_NODE.partition(":")
     key_fetcher = KeyFetcher(
-        node_host=_host,
-        node_port=int(_port) if _port else 21841,
+        nodes=_parse_nodes(OC_KEYS_NODE),
         arbitrator=OC_ARBITRATOR,
         verify_bin=OC_COMPUTORS_VERIFY_BIN,
         keys_dir=OC_KEYS_DIR,
