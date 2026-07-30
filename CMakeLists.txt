@@ -23,16 +23,17 @@ set(VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/qubic_crypto")
 # four_q.h uses AVX2 + AES intrinsics; K12 uses SSE/AVX.
 add_compile_options(-mavx2 -maes -Wall -Wextra -Wno-unused-parameter)
 
+# Vendored crypto headers expose their whole API as file-static functions, so
+# every TU that includes them warns about the ones it does not call. Treat them
+# as SYSTEM headers: our own sources keep full -Wall -Wextra.
+include_directories(SYSTEM "${VENDOR}/src" "${VENDOR}")
+
 # NO_UEFI tells the platform headers we are a hosted (OS) build, not bare-metal.
 add_compile_definitions(NO_UEFI=1)
 
 add_executable(oc_verify
     src/oc_verify_main.cpp
     src/platform_glue.cpp
-)
-target_include_directories(oc_verify PRIVATE
-    ${VENDOR}/src
-    ${VENDOR}
 )
 
 # Computor-list verifier: checks a fetched Computors payload against the
@@ -41,27 +42,15 @@ add_executable(computors_verify
     src/computors_verify_main.cpp
     src/platform_glue.cpp
 )
-target_include_directories(computors_verify PRIVATE
-    ${VENDOR}/src
-    ${VENDOR}
-)
 
 # Test-bundle generator (uses the same vendored crypto to sign real bundles).
 add_executable(make_test_bundle
     tests/make_test_bundle.cpp
     src/platform_glue.cpp
 )
-target_include_directories(make_test_bundle PRIVATE
-    ${VENDOR}/src
-    ${VENDOR}
-)
 
 # Test-computors generator (arbitrator-signed key list matching make_test_bundle's keys).
 add_executable(make_test_computors
     tests/make_test_computors.cpp
     src/platform_glue.cpp
-)
-target_include_directories(make_test_computors PRIVATE
-    ${VENDOR}/src
-    ${VENDOR}
 )

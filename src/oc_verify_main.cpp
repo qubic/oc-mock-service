@@ -41,7 +41,8 @@
 static constexpr int      NUMBER_OF_COMPUTORS = 676;
 static constexpr int      QUORUM              = NUMBER_OF_COMPUTORS * 2 / 3 + 1; // 451
 static constexpr int      SIGNATURE_SIZE      = 64;
-static constexpr uint8_t  OC_MACHINE_INVOCATION_TYPE = 192; // NetworkMessageType::OC_MACHINE_INVOCATION
+// Reference only: we are fed the bundle payload, the type byte is already stripped.
+[[maybe_unused]] static constexpr uint8_t OC_MACHINE_INVOCATION_TYPE = 192; // NetworkMessageType::OC_MACHINE_INVOCATION
 static constexpr char     OC_AUTH_DOMAIN_SEPARATOR[13] =
     { 'Q','U','B','I','C','_','O','C','_','A','U','T','H' };
 static constexpr unsigned OC_AUTH_DOMAIN_SEPARATOR_SIZE = 13;
