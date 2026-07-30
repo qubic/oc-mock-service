@@ -63,8 +63,7 @@ Then:
 
 ```bash
 # An OC machine posts a raw bundle:
-curl -X POST --data-binary @/tmp/bundle.bin -H "X-OC-Machine-Id: demo" \
-     http://localhost:8000/ingest
+curl -X POST --data-binary @/tmp/bundle.bin http://localhost:8000/ingest
 
 open http://localhost:8000/          # live homepage
 ```
@@ -94,17 +93,20 @@ docker run -d --name oc-mock-service --restart unless-stopped \
 | `OC_VERIFY_BIN` | `build/oc_verify` | path to the verifier binary |
 | `OC_KEYS_DIR` | `keys/` | dir of `computors_<epoch>.bin` files |
 | `OC_DB_PATH` | `data/oc_mock.db` | SQLite file |
-| `OC_KEYS_NODE` | *(empty = off)* | node (`host` or `host:port`, port defaults to 21841) to lazily fetch missing epoch keysets from |
+| `OC_KEYS_NODE` | *(empty = off)* | node(s) to lazily fetch missing epoch keysets from: comma-separated `host` or `host:port` (port defaults to 21841), tried in order until one serves the epoch |
 | `OC_ARBITRATOR` | mainnet arbitrator | identity the fetched computor list must be signed by |
 | `OC_COMPUTORS_VERIFY_BIN` | `build/computors_verify` | path to the list verifier binary |
 | `OC_ALLOW_UNSIGNED_COMPUTORS` | *(off)* | `1` accepts a fetched list with an **all-zero** signature (test networks have no arbitrator). A wrong non-zero signature is still rejected. Never enable against mainnet. |
 
 With `OC_KEYS_NODE` set, the service self-heals across epoch transitions: a
-bundle for an unknown epoch triggers a fetch of `BroadcastComputors` from that
-node, the arbitrator signature is verified (`computors_verify`), and only then
-is the keyset cached. The node is a transport, not a trust root — a
-substituted list fails the signature check. Fetches are rate-limited (60 s
-cooldown), so garbage bundles with fake epochs cannot hammer the node.
+bundle for an unknown epoch triggers a fetch of `BroadcastComputors`, the
+arbitrator signature is verified (`computors_verify`), and only then is the
+keyset cached. Nodes are a transport, not a trust root — a substituted list
+fails the signature check. Listed nodes are tried in order until one serves the
+requested epoch, so an unreachable node (or one still on the previous epoch)
+falls through to the next. Fetches are rate-limited (60 s cooldown for the
+whole round, not per node), so garbage bundles with fake epochs cannot hammer
+the nodes.
 
 ## Verification semantics (proven by tests)
 

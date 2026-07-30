@@ -84,6 +84,11 @@ class Store:
             ).fetchone()["n"]
         return is_new, rep
 
+    def total(self) -> int:
+        """Total verified invocations stored (not just the recent page)."""
+        with self._conn() as c:
+            return c.execute("SELECT COUNT(*) AS n FROM invocations").fetchone()["n"]
+
     def recent(self, limit: int = 100):
         with self._conn() as c:
             rows = c.execute(
