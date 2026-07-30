@@ -63,8 +63,7 @@ Then:
 
 ```bash
 # An OC machine posts a raw bundle:
-curl -X POST --data-binary @/tmp/bundle.bin -H "X-OC-Machine-Id: demo" \
-     http://localhost:8000/ingest
+curl -X POST --data-binary @/tmp/bundle.bin http://localhost:8000/ingest
 
 open http://localhost:8000/          # live homepage
 ```

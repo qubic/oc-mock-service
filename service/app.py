@@ -80,6 +80,26 @@ if OC_KEYS_NODE:
 MAX_BUNDLE = 64 * 1024  # spec max ~30790 bytes; generous ceiling
 
 
+def _source_ip(request) -> str:
+    """Reporting machine's IP, used as the delivery/replication source key.
+
+    Behind Cloudflare the socket peer is a CF edge IP, so every machine would
+    collapse into a single delivery source and the replication count would
+    always read 1. CF-Connecting-IP carries the real client IP and CF strips
+    any client-supplied copy, so it is trustworthy when present. It is absent
+    when the service is reached directly -> fall back to the socket peer.
+
+    ponytail: IP is not machine identity — machines behind one NAT still
+    collapse, a machine on a dynamic IP still inflates. Needs an operator key
+    in the bundle if replication ever becomes a trust signal rather than a
+    liveness display.
+    """
+    cf = request.headers.get("CF-Connecting-IP")
+    if cf and cf.strip():
+        return cf.strip()
+    return request.client.host if request.client else "unknown"
+
+
 @app.post("/ingest")
 async def ingest(request: Request):
     """Accept a raw OcMachineInvocation bundle from an OC machine."""
@@ -89,9 +109,7 @@ async def ingest(request: Request):
     if len(body) > MAX_BUNDLE:
         raise HTTPException(413, "bundle too large")
 
-    source = request.headers.get("X-OC-Machine-Id") or (
-        request.client.host if request.client else "unknown"
-    )
+    source = _source_ip(request)
 
     # Lazily provision the epoch's computor keyset if it is missing (fetched
     # from the configured node, authenticated by the arbitrator signature).
