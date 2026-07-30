@@ -189,12 +189,17 @@ def _render(rows, total: int) -> str:
         </tr>"""
         for r in rows
     )
+    epochs = verifier.cached_epochs()
     stats = [
-        ("Verified invocations", f"{total}"),
+        ("Verified invocations", f"{total}", ""),
+        # Which epochs we can verify against; keysets are fetched lazily on the
+        # first invocation of an epoch, so "none" is normal on a fresh service.
+        ("Computor keysets",
+         ", ".join(str(e) for e in epochs) if epochs else "none yet", " sm"),
     ]
     cards = "\n".join(
-        f'<div class="card"><div class="k">{k}</div><div class="v mono">{v}</div></div>'
-        for k, v in stats
+        f'<div class="card"><div class="k">{k}</div><div class="v mono{c}">{v}</div></div>'
+        for k, v, c in stats
     )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -236,6 +241,7 @@ def _render(rows, total: int) -> str:
   }}
   .card .k {{ font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:.5rem; }}
   .card .v {{ font-size:1.6rem; color:var(--fg); }}
+  .card .v.sm {{ font-size:1.1rem; line-height:1.45; max-width:22ch; }}
   .panel {{ background:var(--panel2); border:1px solid var(--line); border-radius:16px; overflow:hidden; }}
   .panel-h {{
     display:flex; justify-content:space-between; align-items:baseline; gap:1rem;
