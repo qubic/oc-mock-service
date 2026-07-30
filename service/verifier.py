@@ -39,16 +39,6 @@ class Verifier:
     def keys_path(self, epoch: int) -> Path:
         return self.keys_dir / f"computors_{epoch}.bin"
 
-    def cached_epochs(self) -> list:
-        """Epochs we hold a keyset for, ascending. Empty if none fetched yet."""
-        epochs = []
-        for p in self.keys_dir.glob("computors_*.bin"):
-            try:
-                epochs.append(int(p.stem.split("_")[1]))
-            except (IndexError, ValueError):
-                continue  # not one of ours
-        return sorted(epochs)
-
     def verify(self, bundle: bytes) -> dict:
         """Verify a raw OcMachineInvocation bundle.
 
