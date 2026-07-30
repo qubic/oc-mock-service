@@ -132,7 +132,7 @@ def api_invocations(limit: int = 100):
 @app.get("/", response_class=HTMLResponse)
 def homepage():
     rows = store.recent(100)
-    return _render(rows)
+    return _render(rows, store.total())
 
 
 @app.get("/favicon.svg")
@@ -163,7 +163,7 @@ def _ago(ts: float) -> str:
     return f"{d // 86400}d ago"
 
 
-def _render(rows) -> str:
+def _render(rows, total: int) -> str:
     body = "\n".join(
         f"""<tr>
             <td class="mono id">{r['invocation_id']}</td>
@@ -177,11 +177,8 @@ def _render(rows) -> str:
         </tr>"""
         for r in rows
     )
-    latest = max((r["tick"] for r in rows), default=None)
     stats = [
-        ("Verified orders", f"{len(rows)}"),
-        ("Latest tick", f"{latest}" if latest is not None else "—"),
-        ("Quorum threshold", "451 / 676"),
+        ("Verified invocations", f"{total}"),
     ]
     cards = "\n".join(
         f'<div class="card"><div class="k">{k}</div><div class="v mono">{v}</div></div>'
@@ -220,7 +217,7 @@ def _render(rows) -> str:
   h1 {{ font-size:clamp(1.7rem,4vw,2.6rem); line-height:1.1; font-weight:500; margin:0 0 .8rem; letter-spacing:-.02em; }}
   h1 em {{ font-style:normal; color:var(--cyan); }}
   .sub {{ color:var(--muted); max-width:60ch; line-height:1.6; margin:0 0 2.5rem; }}
-  .stats {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; margin-bottom:2.5rem; }}
+  .stats {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,max-content)); gap:1rem; margin-bottom:2.5rem; }}
   .card {{
     background:linear-gradient(139deg,var(--panel2) 0%,var(--panel) 94%);
     border:1px solid var(--line); border-radius:14px; padding:1.1rem 1.25rem;
@@ -233,6 +230,7 @@ def _render(rows) -> str:
     padding:1.1rem 1.25rem; border-bottom:1px solid var(--line);
   }}
   .panel-h h2 {{ font-size:.95rem; font-weight:500; margin:0; }}
+  .muted {{ color:var(--muted); font-weight:400; }}
   .live {{ font-family:var(--mono); font-size:.72rem; color:var(--muted); display:flex; align-items:center; gap:.45rem; }}
   .dot {{ width:7px; height:7px; border-radius:50%; background:var(--cyan); box-shadow:0 0 0 0 #32d9d966; animation:p 2s infinite; }}
   @keyframes p {{ 70% {{ box-shadow:0 0 0 7px #32d9d900; }} 100% {{ box-shadow:0 0 0 0 #32d9d900; }} }}
@@ -252,9 +250,6 @@ def _render(rows) -> str:
   .ok {{ color:var(--cyan); }}
   .age {{ color:var(--muted); font-size:.8rem; }}
   td.empty {{ text-align:center; color:var(--muted); padding:3rem 1rem; }}
-  footer {{ margin-top:1.5rem; color:var(--muted); font-size:.78rem; }}
-  footer a {{ color:var(--cyan); text-decoration:none; }}
-  footer a:hover {{ text-decoration:underline; }}
   @media (max-width:640px) {{ .wrap {{ padding:1.5rem 1rem 3rem; }} }}
 </style></head>
 <body>
@@ -264,9 +259,9 @@ def _render(rows) -> str:
       <span class="tag">Outsourced Computations</span>
     </header>
 
-    <h1>Mock <em>Interface Service</em></h1>
-    <p class="sub">Authorized execution orders received from the live network and
-      cryptographically verified against the epoch's computor set — every order
+    <h1>Mock Interface <em>Service</em></h1>
+    <p class="sub">Authorized invocations received from the live network and
+      cryptographically verified against the epoch's computor set — every invocation
       shown here carries at least 451 valid computor signatures.</p>
 
     <div class="stats">
@@ -275,7 +270,7 @@ def _render(rows) -> str:
 
     <div class="panel">
       <div class="panel-h">
-        <h2>Verified execution orders</h2>
+        <h2>Verified invocations <span class="muted">· latest {len(rows)}</span></h2>
         <span class="live"><span class="dot"></span>live · refreshes every 5s</span>
       </div>
       <div class="scroll">
@@ -285,13 +280,10 @@ def _render(rows) -> str:
             <th>Request value</th><th>Verified sigs</th><th>OC machines</th><th>Last seen</th>
           </tr></thead>
           <tbody>
-            {body if rows else '<tr><td class="empty" colspan="8">No verified orders yet — waiting for the first authorized invocation.</td></tr>'}
+            {body if rows else '<tr><td class="empty" colspan="8">No verified invocations yet — waiting for the first authorized invocation.</td></tr>'}
           </tbody>
         </table>
       </div>
     </div>
-
-    <footer>Public, unauthenticated collector — signature verification is the
-      authenticity guarantee. JSON: <a href="/api/invocations">/api/invocations</a></footer>
   </div>
 </body></html>"""
