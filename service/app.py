@@ -155,10 +155,27 @@ async def ingest(request: Request):
     )
 
 
+# The homepage polls this every 5s from every open tab. Without an explicit
+# Cache-Control, Cloudflare treats a JSON endpoint as uncacheable (DYNAMIC) and
+# every viewer's poll reaches the origin. With it, the edge collapses them into
+# roughly one origin fetch per PoP per TTL, so origin load stops scaling with
+# viewer count.
+#
+#   s-maxage=5      edge holds it for 5s (matches the poll interval)
+#   max-age=0       browser always asks; it has its own 5s timer already
+#   swr=30          edge serves slightly-stale while refetching, so a slow
+#                   origin never turns into a viewer-visible stall
+#
+# CF only honors this if a Cache Rule marks /api/* eligible -- see README.
+_API_CACHE = "public, max-age=0, s-maxage=5, stale-while-revalidate=30"
+
+
 @app.get("/api/invocations")
-def api_invocations(limit: int = 100):
+def api_invocations(limit: int = 100, response: Response = None):
     # `total` rides along so the homepage poller can update the counter card
     # without a second request.
+    if response is not None:
+        response.headers["Cache-Control"] = _API_CACHE
     return {"invocations": store.recent(limit), "total": store.total()}
 
 
