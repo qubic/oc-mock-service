@@ -4,7 +4,7 @@ The table is now rendered twice: server-side on first paint, and client-side by
 the poller. These checks pin the contract between the two — the hooks the
 script needs, and the uint64 decode that both sides implement independently.
 
-Run: python3 tests/test_homepage.py   (matches test_source_ip.py; not pytest)
+Run: python3 tests/test_homepage.py
 """
 
 import json

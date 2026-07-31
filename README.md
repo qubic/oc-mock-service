@@ -36,6 +36,15 @@ many Core nodes ──whitelisted IP──▶ OC machines ──raw bundle bytes
 | `tools/fetch_computors.py` | Manual keyset fetch CLI (verifies by default). |
 | `tests/make_test_bundle.cpp` | Generates real signed bundles (valid / forged / short / dup) for testing. |
 | `tests/make_test_computors.cpp` | Generates an arbitrator-signed computor list matching the test bundle's keys. |
+| `tests/test_source_ip.py` | Self-check: source-IP resolution behind CF and direct. |
+| `tests/test_homepage.py` | Self-check: homepage render hooks + JS/Python uint64 decode parity. |
+
+The two `.py` files are assert-based self-checks. Run them directly:
+
+```bash
+python3 tests/test_source_ip.py
+python3 tests/test_homepage.py     # uses node, if present, for the JS parity check
+```
 
 ## Build the verifier
 
@@ -85,6 +94,44 @@ docker run -d --name oc-mock-service --restart unless-stopped \
   -v "$PWD/data:/opt/qubic/oc-mock-service/data" \
   oc-mock-service:latest
 ```
+
+### Behind Cloudflare
+
+Two things need configuring when the service sits behind CF.
+
+**1. Cache the invocations JSON.** The homepage polls `/api/invocations` every
+5 s from *every open tab*. CF classifies JSON responses as `DYNAMIC` and does
+not cache them by default, so without a Cache Rule every viewer's poll reaches
+the origin and origin load scales with viewer count.
+
+The app already sends the header:
+
+```
+Cache-Control: public, max-age=0, s-maxage=5, stale-while-revalidate=30
+```
+
+but **CF only honors it if a Cache Rule marks the path eligible**. In the
+dashboard: *Caching → Cache Rules → Create rule*
+
+| Field | Value |
+|---|---|
+| If incoming requests match | `URI Path` `starts with` `/api/` |
+| Cache eligibility | **Eligible for cache** |
+| Edge TTL | **Use cache-control header if present** |
+| Browser TTL | **Respect origin TTL** |
+
+The edge then collapses all viewers into roughly one origin fetch per PoP per
+5 s, and `stale-while-revalidate` means a slow origin never becomes a
+viewer-visible stall. Verify with `curl -sI https://<host>/api/invocations`:
+`cf-cache-status` should reach `HIT` on the second request within the TTL.
+
+Leave `/` (the homepage HTML) on the default — it is served once per viewer,
+not polled.
+
+**2. Keep the real client IP.** `_source_ip()` reads `CF-Connecting-IP`, which
+CF sets and strips from client-supplied requests. Without it every OC machine
+collapses into the CF edge IP and the replication count always reads 1. This is
+on by default; just don't strip the header in a Transform Rule.
 
 ### Config (env vars)
 

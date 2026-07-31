@@ -1,6 +1,6 @@
 """Self-check for _source_ip: CF and non-CF deployments both resolve a source.
 
-Run: python tests/test_source_ip.py   (from oc_mock_service/)
+Run: python3 tests/test_source_ip.py   (from oc_mock_service/)
 """
 
 import sys

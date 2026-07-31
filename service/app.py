@@ -30,7 +30,7 @@ import os
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, Request, HTTPException, Response
+from fastapi import FastAPI, Query, Request, HTTPException, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .assets import FAVICON_SVG, LOGO_SVG
@@ -166,12 +166,20 @@ async def ingest(request: Request):
 #   swr=30          edge serves slightly-stale while refetching, so a slow
 #                   origin never turns into a viewer-visible stall
 #
-# CF only honors this if a Cache Rule marks /api/* eligible -- see README.
+# CF only honors this if a Cache Rule marks /api/* eligible -- see the
+# "Behind Cloudflare" section in the README.
 _API_CACHE = "public, max-age=0, s-maxage=5, stale-while-revalidate=30"
 
 
 @app.get("/api/invocations")
-def api_invocations(limit: int = 100, response: Response = None):
+def api_invocations(
+    limit: int = Query(100, ge=1, le=1000),
+    response: Response = None,
+):
+    # `limit` is bounded because it is part of the edge cache key: unbounded,
+    # any client could mint endless distinct entries, each costing the origin a
+    # full scan (SQLite treats a negative LIMIT as "no limit").
+    #
     # `total` rides along so the homepage poller can update the counter card
     # without a second request.
     if response is not None:
