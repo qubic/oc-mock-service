@@ -342,8 +342,17 @@ def _render(rows, total: int) -> str:
   .fx input {{ accent-color:var(--cyan); cursor:pointer; margin:0; }}
   .panel-h .right {{ display:flex; align-items:center; gap:1rem; }}
 
+  /* Firework overlay: covers the viewport, never intercepts clicks.
+     width/height are explicit -- a canvas is a replaced element, so inset:0
+     alone leaves it at its intrinsic 300x150 and clips every particle. */
+  #fw {{
+    position:fixed; top:0; left:0; width:100vw; height:100vh;
+    pointer-events:none; z-index:99;
+  }}
+
   @media (prefers-reduced-motion:reduce) {{
     tr.fresh td, .card.pop .v {{ animation:none; }}
+    #fw {{ display:none; }}
   }}
   @media (max-width:640px) {{ .wrap {{ padding:1.5rem 1rem 3rem; }} }}
 </style></head>
@@ -395,6 +404,66 @@ def _render(rows, total: int) -> str:
       </div>
     </div>
   </div>
+  <canvas id="fw"></canvas>
+<script>
+// Firework overlay. Idle = no canvas work at all: the rAF loop only runs while
+// particles are alive, so an idle tab costs nothing.
+var fireworks = (function () {{
+  var cv = document.getElementById('fw');
+  var ctx = cv.getContext('2d');
+  var parts = [];
+  var running = false;
+  var COLORS = ['#32d9d9', '#ffdea1', '#fefff5', '#7ce8ff'];
+
+  function resize() {{
+    cv.width = cv.clientWidth * devicePixelRatio;
+    cv.height = cv.clientHeight * devicePixelRatio;
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  }}
+  resize();
+  addEventListener('resize', resize);
+
+  function frame() {{
+    ctx.clearRect(0, 0, cv.clientWidth, cv.clientHeight);
+    for (var i = parts.length - 1; i >= 0; i--) {{
+      var p = parts[i];
+      p.life -= 0.016;
+      if (p.life <= 0) {{ parts.splice(i, 1); continue; }}
+      p.vy += 26 * 0.016;          // gravity
+      p.vx *= 0.985; p.vy *= 0.985; // drag
+      p.x += p.vx; p.y += p.vy;
+      ctx.globalAlpha = Math.min(1, p.life / p.max);
+      ctx.fillStyle = p.c;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+      ctx.fill();
+    }}
+    ctx.globalAlpha = 1;
+    if (parts.length) requestAnimationFrame(frame);
+    else running = false;
+  }}
+
+  // burst(x, y) in CSS pixels; defaults to a random spot in the upper half.
+  return function burst(x, y) {{
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (x === undefined) x = cv.clientWidth * (0.2 + Math.random() * 0.6);
+    if (y === undefined) y = cv.clientHeight * (0.15 + Math.random() * 0.35);
+    var hue = COLORS[(Math.random() * COLORS.length) | 0];
+    for (var i = 0; i < 60; i++) {{
+      var a = Math.random() * 6.2832;
+      var s = 1.5 + Math.random() * 5;
+      parts.push({{
+        x: x, y: y,
+        vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+        r: 1 + Math.random() * 2,
+        c: Math.random() < 0.25 ? COLORS[(Math.random() * COLORS.length) | 0] : hue,
+        life: 0.8 + Math.random() * 0.8, max: 1.6
+      }});
+    }}
+    if (!running) {{ running = true; requestAnimationFrame(frame); }}
+  }};
+}})();
+</script>
 <script>
 (function () {{
   var POLL_MS = 5000;
@@ -477,11 +546,18 @@ def _render(rows, total: int) -> str:
         shownEl.textContent = list.length;
 
         if (fx && fresh.length) {{
-          fresh.forEach(function (id) {{
+          // Cap the salvo: a backlog flush can surface dozens of new rows at
+          // once and one firework each would be a strobe.
+          var shots = Math.min(fresh.length, 5);
+          fresh.forEach(function (id, i) {{
             var tr = rowsEl.querySelector('tr[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
             if (!tr) return;
             tr.classList.add('fresh');
             tr.addEventListener('animationend', function () {{ tr.classList.remove('fresh'); }}, {{once: true}});
+            if (i < shots) {{
+              var b = tr.getBoundingClientRect();
+              setTimeout(function () {{ fireworks(b.left + b.width * 0.5, b.top + b.height * 0.5); }}, i * 140);
+            }}
           }});
         }}
 
