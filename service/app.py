@@ -575,9 +575,15 @@ var fireworks = (function () {{
       .catch(function () {{ /* transient: next tick retries */ }});
   }}
 
-  setInterval(poll, POLL_MS);
+  // Poll only while the tab is visible. Browsers throttle background timers to
+  // ~1/min but never stop them, so a tab left open overnight would keep hitting
+  // the edge for hours with nobody looking. On return, poll immediately rather
+  // than showing stale rows until the next tick.
+  function pollIfVisible() {{ if (document.visibilityState === 'visible') poll(); }}
+  setInterval(pollIfVisible, POLL_MS);
+  document.addEventListener('visibilitychange', pollIfVisible);
   setInterval(refreshAges, 1000);
-  if (document.visibilityState === 'visible') poll();
+  pollIfVisible();
 }})();
 </script>
 </body></html>"""
